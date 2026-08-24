@@ -1,3 +1,17 @@
 {
-  "targets": {}
+  "targets": {
+    "default": {
+      "resources": {
+        "runtimes": {
+          "MyAgent": {
+            "runtimeId": "MyAgent_MyAgent-IudUaxCEQd",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:867344437585:runtime/MyAgent_MyAgent-IudUaxCEQd",
+            "roleArn": "arn:aws:iam::867344437585:role/AgentCore-MyAgent-default-ApplicationAgentMyAgentRu-fBBv9Q85hJfv"
+          }
+        },
+        "stackName": "AgentCore-MyAgent-default",
+        "deployHash": "73e99a2bab51c8ea"
+      }
+    }
+  }
 }
