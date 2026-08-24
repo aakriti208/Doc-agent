@@ -2,8 +2,6 @@
 
 A serverless RAG assistant on AWS that answers questions from your own documents and can take actions (like creating a support ticket) through an agent.
 
-Built as a hands-on capstone for the AWS Certified Generative AI Developer – Professional (AIP-C01) certification.
-
 ## What it does
 
 - Answers questions grounded in your documents, with source citations
