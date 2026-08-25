@@ -1,4 +1,6 @@
 from typing import Any
+from dotenv import load_dotenv
+load_dotenv()
 from collections import OrderedDict
 from strands import Agent, tool
 import asyncio
