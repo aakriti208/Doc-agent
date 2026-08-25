@@ -9,8 +9,17 @@
             "roleArn": "arn:aws:iam::867344437585:role/AgentCore-MyAgent-default-ApplicationAgentMyAgentRu-fBBv9Q85hJfv"
           }
         },
+        "mcp": {
+          "gateways": {
+            "doc-agent-gateway": {
+              "gatewayId": "myagent-doc-agent-gateway-lxqd5j5ihb",
+              "gatewayArn": "arn:aws:bedrock-agentcore:us-east-1:867344437585:gateway/myagent-doc-agent-gateway-lxqd5j5ihb",
+              "gatewayUrl": "https://myagent-doc-agent-gateway-lxqd5j5ihb.gateway.bedrock-agentcore.us-east-1.amazonaws.com"
+            }
+          }
+        },
         "stackName": "AgentCore-MyAgent-default",
-        "deployHash": "73e99a2bab51c8ea"
+        "deployHash": "fab385a987a2e49f"
       }
     }
   }
