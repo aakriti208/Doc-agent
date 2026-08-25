@@ -14,7 +14,7 @@ dependencies = [
     "botocore[crt] >= 1.35.0",
     "mcp ~= 1.24.0",
     "strands-agents >= 1.15.0",
-    
+    "mcp-proxy-for-aws >= 0.1.0",
 ]
 
 [tool.hatch.build.targets.wheel]
