@@ -98,6 +98,34 @@ The gateway client was added alongside the existing Exa AI client in `main.py` �
 
 ![First end-to-end RAG test — AgentCore inspector showing grounded answer and ReAct timeline](assets/screenshots/grounded-rag.png)
 
+### August 25 2026 — Action Tool: Agent + Lambda
+
+**What it does:** Beyond answering questions, doc-agent can take real actions. A Lambda-backed `create_ticket` tool lets the agent open a support ticket when a user reports a problem — turning it from a Q&A bot into an assistant that does things.
+
+**How it works:** The Strands agent runs on AgentCore Runtime and reasons about each request using the ReAct loop (reason → act → observe → answer). Its tools are exposed through AgentCore Gateway over MCP: a Knowledge Base `Retrieve` tool for grounded answers, and a `create_ticket` Lambda for actions. The agent selects the right tool based on each tool's description — routing policy questions to retrieval and problem reports to ticket creation. When it calls `create_ticket`, the gateway invokes the Lambda with the agent's chosen parameters (subject, priority), the Lambda returns a ticket ID, and the agent confirms it to the user.
+
+**The build:** The `create_ticket` Lambda reads the tool inputs the agent passes and returns a JSON ticket result. It was registered as a Lambda MCP target on the gateway with an inline tool schema (name, description, parameters) and IAM-role outbound auth. The gateway's execution role was granted least-privilege permission to invoke the function.
+
+**Result:** doc-agent correctly handles single-tool and multi-tool requests. In one test, a message combining a policy question and a problem report caused the agent to call both tools in a single turn — retrieving the policy answer from the Knowledge Base and creating a ticket for the issue. This demonstrates real multi-tool reasoning: the agent picks the right tool per part of the request, not just one blindly.
+
+**Single-tool test — ticket creation only:**
+
+![Agent creates support ticket for login issue](assets/screenshots/Screenshot%202026-08-25%20at%209.17.15%20PM.png)
+
+*"I can't log into my account and I've tried resetting my password twice. Can you open a support ticket?"* — The agent created TICKET-FD618D29 (High priority) and confirmed it. 1 tool used, 3.0k tokens in / 259 out. The lower input token count (vs. the RAG test) confirms no KB retrieval happened — the agent correctly routed this as an action-only request.*
+
+![Timeline for ticket creation — ReAct loop](assets/screenshots/Screenshot%202026-08-25%20at%209.18.57%20PM.png)
+
+*Timeline shows the same ReAct pattern: tool discovery → reasoning → `execute_tool` (487ms) → answer. Total: 7.20s.*
+
+**Multi-tool test — KB retrieval + ticket in one turn:**
+
+![Agent handles policy question and ticket creation simultaneously](assets/screenshots/Screenshot%202026-08-25%20at%2010.03.52%20PM.png)
+
+![Multi-tool result with 2 tools used badge and full timeline](assets/screenshots/Screenshot%202026-08-25%20at%2010.04.45%20PM.png)
+
+*"What's the company policy on remote work? Also, my VPN keeps disconnecting...please open a ticket for it."* — The agent called both tools in a single turn: `create_ticket` for the VPN issue (TICKET-7EC9BB42, Medium priority) and `Retrieve` for the remote work policy. **2 tools used** badge confirms it. The timeline shows two back-to-back `execute_tool` calls (1.41s and 873ms) before the final answer cycle — the agent parallelised the tool calls within the same ReAct loop iteration.*
+
 ---
 
 ## What's Next
