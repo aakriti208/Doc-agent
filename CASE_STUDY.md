@@ -126,6 +126,22 @@ The gateway client was added alongside the existing Exa AI client in `main.py` �
 
 *"What's the company policy on remote work? Also, my VPN keeps disconnecting...please open a ticket for it."* — The agent called both tools in a single turn: `create_ticket` for the VPN issue (TICKET-7EC9BB42, Medium priority) and `Retrieve` for the remote work policy. **2 tools used** badge confirms it. The timeline shows two back-to-back `execute_tool` calls (1.41s and 873ms) before the final answer cycle — the agent parallelised the tool calls within the same ReAct loop iteration.*
 
+### August 26 2026 — Auto-Sync Pipeline: Keeping the Knowledge Base Current
+
+**Problem:** In a RAG system, retrieval reads from a vector store, not directly from the source documents. So when a document changes in S3, the answers stay stale — the vectors still reflect the old content until the Knowledge Base is re-synced. Manually re-syncing after every change isn't practical for a system where documents update frequently.
+
+**Solution:** An event-driven pipeline that re-syncs the Knowledge Base automatically whenever a document changes. When a file is added, updated, or removed in S3, an S3 event is routed through EventBridge to a Lambda function, which calls the Knowledge Base ingestion job to re-chunk and re-embed the changed content — no manual step required.
+
+```
+S3 change → EventBridge → Lambda → StartIngestionJob → KB re-syncs
+```
+
+**The build:** The Lambda uses the `bedrock-agent` client (control plane) to trigger ingestion. Two permissions were required in opposite directions: an execution role letting the Lambda call Bedrock, and a resource-based policy letting EventBridge invoke the Lambda. EventBridge notifications were enabled on the bucket, and an event rule filtered to object-created and object-deleted events for that specific bucket.
+
+**Result:** Editing a document in S3 now triggers an automatic ingestion job with no human intervention — verified by uploading a changed file and watching an unprompted sync appear in the Knowledge Base. Documents stay fresh automatically: any change in S3 triggers a re-sync of the Knowledge Base through the event-driven pipeline, so the assistant never answers from outdated content.
+
+**Lesson:** Stale retrieval is a silent failure — the agent answers confidently from outdated vectors with no indication anything is wrong. An event-driven sync pipeline closes that gap without adding operational burden.
+
 ---
 
 ## What's Next
