@@ -8,6 +8,7 @@ from strands.agent.conversation_manager.null_conversation_manager import NullCon
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from model.load import load_model
 from mcp_client.client import get_streamable_http_mcp_client, get_gateway_mcp_client
+from cache.semantic_cache import get_cached_response, store_response
 
 app = BedrockAgentCoreApp()
 log = app.logger
@@ -15,10 +16,13 @@ log = app.logger
 # Define a Streamable HTTP MCP Client
 mcp_clients = [get_streamable_http_mcp_client(), get_gateway_mcp_client()]
 
-DEFAULT_SYSTEM_PROMPT = """
-You are a helpful assistant. Use tools when appropriate.
+DEFAULT_SYSTEM_PROMPT = [
+      {"text": """You are a helpful assistant. Use tools when=appropriate.\n\n"""
+      },
+      {"cachePoint": {"type": "default"}   # marks end of cacheableprefix
+      }
+  ]
 
-"""
 
 
 # Define a collection of tools used by the model
@@ -146,22 +150,44 @@ def _is_inline_function_call(event: dict) -> bool:
 async def invoke(payload, context):
     log.info("Invoking Agent.....")
 
-
     session_id = getattr(context, 'session_id', 'default-session')
     agent = get_or_create_agent(session_id)
 
     prompt = _extract_prompt(payload)
 
+    # Semantic cache: only applies to plain string prompts (not multi-turn or tool results)
+    if isinstance(prompt, str):
+        cached = get_cached_response(prompt)
+        if cached:
+            log.info("Semantic cache hit — returning cached response")
+            yield {"event": {"contentBlockDelta": {"delta": {"text": cached}}}}
+            return
 
-    async for event in agent.stream_async(
-        prompt,
-    ):
+    response_parts: list[str] = []
+    used_tools = False
+
+    async for event in agent.stream_async(prompt):
         if not isinstance(event, dict) or "event" not in event:
             continue
-        cbs = event["event"].get("contentBlockStart")
+        inner = event["event"]
+        cbs = inner.get("contentBlockStart")
         if cbs is not None and not cbs.get("start"):
             continue
+        # Track tool use so we skip caching dynamic/retrieval responses
+        if cbs is not None:
+            start = cbs.get("start", {})
+            if isinstance(start, dict) and start.get("toolUse"):
+                used_tools = True
+        # Collect text deltas for cache storage
+        if isinstance(prompt, str) and not used_tools:
+            delta = inner.get("contentBlockDelta", {}).get("delta", {})
+            if "text" in delta:
+                response_parts.append(delta["text"])
         yield event
+
+    # Store in semantic cache only if no tools were used (response is static/safe to cache)
+    if isinstance(prompt, str) and not used_tools and response_parts:
+        store_response(prompt, "".join(response_parts))
 
 
 if __name__ == "__main__":
