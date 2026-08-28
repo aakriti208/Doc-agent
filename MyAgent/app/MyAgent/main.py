@@ -164,7 +164,6 @@ async def invoke(payload, context):
             return
 
     response_parts: list[str] = []
-    used_tools = False
 
     async for event in agent.stream_async(prompt):
         if not isinstance(event, dict) or "event" not in event:
@@ -173,20 +172,14 @@ async def invoke(payload, context):
         cbs = inner.get("contentBlockStart")
         if cbs is not None and not cbs.get("start"):
             continue
-        # Track tool use so we skip caching dynamic/retrieval responses
-        if cbs is not None:
-            start = cbs.get("start", {})
-            if isinstance(start, dict) and start.get("toolUse"):
-                used_tools = True
         # Collect text deltas for cache storage
-        if isinstance(prompt, str) and not used_tools:
+        if isinstance(prompt, str):
             delta = inner.get("contentBlockDelta", {}).get("delta", {})
             if "text" in delta:
                 response_parts.append(delta["text"])
         yield event
 
-    # Store in semantic cache only if no tools were used (response is static/safe to cache)
-    if isinstance(prompt, str) and not used_tools and response_parts:
+    if isinstance(prompt, str) and response_parts:
         store_response(prompt, "".join(response_parts))
 
 
