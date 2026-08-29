@@ -142,6 +142,26 @@ S3 change → EventBridge → Lambda → StartIngestionJob → KB re-syncs
 
 **Lesson:** Stale retrieval is a silent failure — the agent answers confidently from outdated vectors with no indication anything is wrong. An event-driven sync pipeline closes that gap without adding operational burden.
 
+### August 27 2026 — Prompt Caching + Semantic Caching
+
+**Problem:** Every request paid full token cost to re-tokenize the same static content — system prompt, tool definitions, and prior conversation — on every call. Repeated or semantically similar questions also triggered full agent runs with KB retrieval, even when the answer hadn't changed.
+
+**What was built:**
+
+Two caching layers were added independently.
+
+**Prompt caching** (Claude-native, via Strands): `CacheConfig(strategy="auto")` was added to `BedrockModel` alongside `cache_tools="default"`. Strands automatically injects cache breakpoints after the system prompt and tool definitions. On the first request, Claude writes the cache. On subsequent requests within 5 minutes using the same static prefix, it reads from cache at ~0.1x the token cost. No changes to request format required — Strands handles the injection.
+
+**Semantic caching** (application-layer): A `cache/semantic_cache.py` module was added. Incoming plain-string prompts are embedded using Titan Text Embeddings V2 (512 dimensions). The embedding is compared via cosine similarity against all stored embeddings. If similarity ≥ 0.92, the cached response is returned immediately — no agent run, no KB retrieval, no LLM call. Otherwise the agent runs normally, and the response is stored afterward for future hits.
+
+**Bug hit during testing:** The first version skipped caching any response where the agent used a tool. The reasoning was to avoid caching dynamic data. In practice, this blocked almost everything — the KB retrieval tool fires on nearly every query in a RAG agent, so the semantic cache stored nothing and every lookup was a miss. The fix was to remove the tool-call filter entirely. The KB is stable content; caching its responses is correct. The 0.92 similarity threshold is strict enough to prevent wrong matches.
+
+**Second observation from traces:** Some prompt-caching questions were answered using the Exa web search tool rather than the Knowledge Base — visible in the timeline as `execute_tool web_search_exa`. This indicated a gap in what's indexed in the KB: when retrieval doesn't find relevant chunks, the agent falls back to web search. A separate concern from caching, but surfaced by watching the traces.
+
+**Result:** Semantic cache hits return in ~500ms (one embedding call) vs. 20–36s for a full agent run. Prompt caching cuts input token cost on static content by ~90% across repeated sessions. The two layers are complementary: prompt caching reduces cost on every call; semantic caching eliminates the call entirely on repeated questions.
+
+**Lesson:** For a RAG agent, a tool-call filter on semantic caching is counterproductive — it blocks exactly the responses you most want to cache. Instrument traces before optimizing: the AgentCore inspector made both the cache miss pattern and the Exa-vs-KB routing issue immediately visible.
+
 ---
 
 ## What's Next
